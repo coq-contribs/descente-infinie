@@ -49,6 +49,7 @@ COQSRCLIBS:=-I $(COQLIB)/kernel -I $(COQLIB)/lib \
   -I $(COQLIB)/plugins/fourier \
   -I $(COQLIB)/plugins/funind \
   -I $(COQLIB)/plugins/groebner \
+  -I $(COQLIB)/plugins/interface \
   -I $(COQLIB)/plugins/micromega \
   -I $(COQLIB)/plugins/omega \
   -I $(COQLIB)/plugins/quote \
