@@ -1,0 +1,10 @@
+-R src DescenteInfinie
+-custom "$(CAMLOPTLINK) $(ZDEBUG) $(ZFLAGS) -shared -o src/di_plugin.cmxs src/di.cmx src/di_plugin_mod.cmx" "src/di.cmx src/di_plugin_mod.cmx" src/di_plugin.cmxs
+-custom "$(CAMLLINK) -g -a -o src/di_plugin.cma src/di.cmo src/di_plugin_mod.cmo" "src/di.cmo src/di_plugin_mod.cmo" src/di_plugin.cma
+-custom "$(COQBIN)coqc $(COQDEBUG) $(COQFLAGS) $*" "%.v $(DI_PLUGINOPT) $(DI_PLUGIN)" "%.vo %.glob"
+DI_PLUGIN = "src/di_plugin.cma"
+DI_PLUGINOPT = "src/di_plugin.cmxs"
+COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"
+CAMLP4OPTIONS = "-loc loc"
+src/di.ml
+src/di_plugin_mod.ml

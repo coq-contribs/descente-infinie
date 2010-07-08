@@ -1,0 +1,16 @@
+Name: DescenteInfinie
+Title: The Descente Infinie Tactic
+Description: This is a tactic plugin for coq. The tactic helps to prove inductive lemmas by fixpoint functions. A manual for the tactic can be found on its homepage listed above.
+URL: http://www.comp.nus.edu.sg/~limengra/di_manual.htm
+Keywords: Induction, Descente Infinie
+Category: Miscellaneous/Coq Extensions
+Author: Razvan Voicu
+Email: razvan@comp.nus.edu.sg
+Homepage: http://www.comp.nus.edu.sg/~razvan/
+Institution: National University of Singapore
+Author: Li Mengran
+Email: limengra@comp.nus.edu.sg
+Homepage: http://www.comp.nus.edu.sg/~limengra
+Institution: National University of Singapore
+Date: February 2010
+License: GPL
