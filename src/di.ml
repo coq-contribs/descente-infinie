@@ -8,7 +8,7 @@ open Names
 open Tacmach
 open Declarations
 open Tacexpr
-open Util
+open Pp
 open Genarg
 
 exception DIPatError of string
@@ -218,16 +218,16 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                let for_tac = tclTHENLIST forward_tacs in
                let tac = destruct_to_depth (List.hd subterms) rec_flags fixid to_depth (current_dep+1)
                          de_ids ids_to_apply itfs (Some for_tac) in
-               let pl = List.map (fun id -> (Util.dummy_loc, IntroIdentifier id)) fresh_ids in
+               let pl = List.map (fun id -> (dummy_loc, IntroIdentifier id)) fresh_ids in
                (pl, tac)
              else ([], clear [fixid])
           )
           rec_intro_flags
         )
     in
-    let pat = (Util.dummy_loc, IntroOrAndPattern pl) in
+    let pat = (dummy_loc, IntroOrAndPattern pl) in
     tclTHENS 
-      (new_destruct false [ElimOnIdent (Util.dummy_loc, id)] None (None, Some pat) None)
+      (new_destruct false [ElimOnIdent (dummy_loc, id)] None (None, Some pat) None)
       tacs gl
 
 (* find out whether the variables that are going to be introed by "destruct" are of
@@ -348,7 +348,7 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
                      with e -> print_string "list combine error at destruct_on_pattern2 3\n"; raise e in
       let (taclist, pl) = iter_or_branch com_list in
       let dp = (loc, IntroOrAndPattern pl) in
-      tclTHENS (new_destruct false [ElimOnIdent (Util.dummy_loc, id)] None (None, Some dp) None) taclist gl
+      tclTHENS (new_destruct false [ElimOnIdent (dummy_loc, id)] None (None, Some dp) None) taclist gl
 
   | _ -> print_string "wrong pattern"; tclIDTAC gl
 
