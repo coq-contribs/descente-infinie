@@ -10,6 +10,7 @@ open Declarations
 open Tacexpr
 open Pp
 open Genarg
+open Misctypes
 
 exception DIPatError of string
 
@@ -38,7 +39,7 @@ let get_des_ids (hyp_type:constr) (id:identifier) (num_params:int) =
       | (Rel _ | Sort _ | Const _ | Construct _ | Ind _ | Prod _ | LetIn _ | Lambda _
          | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _) -> None
       | Var id -> Some id
-      | App (_,al) -> 
+      | App (_,al) ->
                       (Array.fold_left
                              (fun a c ->
                                 match a with
@@ -54,7 +55,7 @@ let get_des_ids (hyp_type:constr) (id:identifier) (num_params:int) =
 
 let get_current_context () =
     try Pfedit.get_current_goal_context ()
-    with e when Logic.catchable_exception e -> 
+    with e when Logic.catchable_exception e ->
       (Evd.empty, Global.env())
 
 let get_constructors (i:inductive) n =
@@ -70,9 +71,9 @@ let is_recursive (ind:inductive) (c:constr) =
     match kind_of_term c with
     | (Rel _ | Var _   | Sort _ | Const _ | Construct _
        | Cast _ | Evar _ | Meta _ | LetIn _ | Case _ | Fix _ | CoFix _) -> 0
-    
+
     | Ind i -> if i=ind then 1 else 0
-    
+
     | Prod (na,t,c) -> (count_ind t) + (count_ind c)
     | Lambda (na,t,c) -> (count_ind t) + (count_ind c)
     | App (c,al) -> (count_ind c) + (Array.fold_left (fun a c -> (count_ind c) + a) 0 al)
@@ -111,7 +112,7 @@ let rec ids_of_pattern (_,ip) =
   | IntroRewrite b -> []
   | IntroIdentifier id -> [id]
   | IntroFresh id -> [id]
-  | IntroAnonymous -> []  
+  | IntroAnonymous -> []
 
 
 (* This function returns the list of hypotheses that are related to the
@@ -226,12 +227,12 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
         )
     in
     let pat = (dummy_loc, IntroOrAndPattern pl) in
-    tclTHENS 
+    tclTHENS
       (new_destruct false [ElimOnIdent (dummy_loc, id)] None (None, Some pat) None)
       tacs gl
 
 (* find out whether the variables that are going to be introed by "destruct" are of
-   the same type as the decreasing argument 
+   the same type as the decreasing argument
  *)
 let rec get_introtypeflags ind is_dep constype nparams =
   match kind_of_term constype with
@@ -277,7 +278,7 @@ let di_tac3 id k gl =
     let is_dep = is_dependent dec_arg_type in
     let temp_ids = cut_list_at id ids_to_rev in
     let ids_to_apply = sublist temp_ids 0 ((List.length temp_ids) - 1) in
-    let itfs = List.map (fun ct -> get_introtypeflags ind is_dep ct num_params) constypes in 
+    let itfs = List.map (fun ct -> get_introtypeflags ind is_dep ct num_params) constypes in
     (tclTHEN (revert ids_to_rev) (tclTHEN (fix (Some fixid) index) (tclTHEN intros
 
      (destruct_to_depth id rec_flags fixid k 0 de_ids ids_to_apply itfs None)
@@ -285,7 +286,7 @@ let di_tac3 id k gl =
     ))) gl
 
 
-  
+
 let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_ids ids_to_rev gl =
   let idref = ref None in
   let rec iter_and_branch pl patbuf tacbuf replace_ids =
@@ -299,11 +300,11 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
                  ids_to_avoid := new_id::!ids_to_avoid;
                  idref := Some (new_id, (loc,p), (loc2,p2));
                  iter_and_branch rest ((loc, IntroIdentifier new_id)::patbuf) tacbuf replace_ids
-           
+
            | (IntroIdentifier id1, IntroAnonymous) ->
                iter_and_branch rest ((loc,p)::patbuf) tacbuf (id1::replace_ids)
 
-           | (IntroIdentifier id1, IntroIdentifier id2) -> 
+           | (IntroIdentifier id1, IntroIdentifier id2) ->
                let rep_ids = List.rev (id1::replace_ids) in
                let com_list = try (List.combine des_ids rep_ids)
                                    with e -> print_string "list combine error at destruct_on_pattern2 1\n";
@@ -316,11 +317,11 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
                                         try
                                             (Idmap.find x replacement_map)
                                         with _ -> x) ids_to_rev in
-               let app_arg = List.map (fun x -> mkVar x) (cut_list_at id1 replaced) in 
+               let app_arg = List.map (fun x -> mkVar x) (cut_list_at id1 replaced) in
                let term = mkApp ((mkVar fixid), (Array.of_list app_arg)) in
                let tac = Tactics.forward None (Some (dummy_loc, IntroIdentifier id2)) term in
                  iter_and_branch rest ((loc,p)::patbuf) (tac::tacbuf) replace_ids
-               
+
            | _ -> raise (DIPatError "unexpected pattern")
            )
   in

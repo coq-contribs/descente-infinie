@@ -6,5 +6,5 @@ DI_PLUGIN = "src/di_plugin.cma"
 DI_PLUGINOPT = "src/di_plugin.cmxs"
 COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"
 CAMLP4OPTIONS = "-loc loc"
-src/di.ml
+src/di.ml4
 src/di_plugin_mod.ml
