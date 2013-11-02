@@ -216,7 +216,7 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                    )
                    subterms
                in
-               let for_tac = tclTHENLIST forward_tacs in
+               let for_tac = tclTHENLIST (List.map Proofview.V82.of_tactic forward_tacs) in
                let tac = destruct_to_depth (List.hd subterms) rec_flags fixid to_depth (current_dep+1)
                          de_ids ids_to_apply itfs (Some for_tac) in
                let pl = List.map (fun id -> (Loc.ghost, IntroIdentifier id)) fresh_ids in
@@ -228,7 +228,8 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
     in
     let pat = (Loc.ghost, IntroOrAndPattern pl) in
     tclTHENS
-      (new_destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some pat) None)
+      (Proofview.V82.of_tactic
+         (new_destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some pat) None))
       tacs gl
 
 (* find out whether the variables that are going to be introed by "destruct" are of
@@ -279,7 +280,7 @@ let di_tac3 id k gl =
     let temp_ids = cut_list_at id ids_to_rev in
     let ids_to_apply = sublist temp_ids 0 ((List.length temp_ids) - 1) in
     let itfs = List.map (fun ct -> get_introtypeflags ind is_dep ct num_params) constypes in
-    (tclTHEN (revert ids_to_rev) (tclTHEN (fix (Some fixid) index) (tclTHEN intros
+    (tclTHEN (revert ids_to_rev) (tclTHEN (fix (Some fixid) index) (tclTHEN (Proofview.V82.of_tactic intros)
 
      (destruct_to_depth id rec_flags fixid k 0 de_ids ids_to_apply itfs None)
 
@@ -337,10 +338,10 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
       match (!idref) with
       | Some (nid, patt, patt2) ->
              idref := None;
-             let tac = tclTHENLIST taclist in
+             let tac = tclTHENLIST (List.map Proofview.V82.of_tactic taclist) in
                 ((tclTHEN tac (destruct_on_pattern2 nid ids_to_avoid (patt,patt2) fixid des_ids ids_to_rev))::l1, patlist::l2)
       | None ->
-          let tac = tclTHENLIST (List.append taclist [clear [fixid]]) in
+          let tac = tclTHENLIST (List.append (List.map Proofview.V82.of_tactic taclist) [clear [fixid]]) in
           (tac::l1, patlist::l2)
   in
   match (pat, pat2) with
@@ -349,7 +350,7 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
                      with e -> print_string "list combine error at destruct_on_pattern2 3\n"; raise e in
       let (taclist, pl) = iter_or_branch com_list in
       let dp = (loc, IntroOrAndPattern pl) in
-      tclTHENS (new_destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some dp) None) taclist gl
+      tclTHENS (Proofview.V82.of_tactic (new_destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some dp) None)) taclist gl
 
   | _ -> print_string "wrong pattern"; tclIDTAC gl
 
@@ -369,7 +370,7 @@ let di_tac4 id ip ip2 gl =
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
     let tmp = get_des_ids dec_arg_type id num_params in
     let des_ids = List.append tmp [id] in
-    (tclTHEN (revert ids_to_rev) (tclTHEN (fix (Some fixid) index) (tclTHEN (intros_using ids_to_rev)
+    (tclTHEN (revert ids_to_rev) (tclTHEN (fix (Some fixid) index) (tclTHEN (Proofview.V82.of_tactic (intros_using ids_to_rev))
 
      (destruct_on_pattern2 id ids_to_avoid (ip,ip2) fixid des_ids ids_to_rev)
 
@@ -387,6 +388,6 @@ let di_tac6 ce k gl =
 
 (* grammar declarations which hook the tactic to the proof engine *)
 TACTIC EXTEND di
-| ["di" constr(ce) natural(k)] -> [di_tac6 ce k]
-| ["di" constr(ce) "as" simple_intropattern(ip) "hyps" simple_intropattern(ip2)] -> [di_tac5 ce ip ip2]
+| ["di" constr(ce) natural(k)] -> [Proofview.V82.tactic (di_tac6 ce k)]
+| ["di" constr(ce) "as" simple_intropattern(ip) "hyps" simple_intropattern(ip2)] -> [Proofview.V82.tactic (di_tac5 ce ip ip2)]
 END
