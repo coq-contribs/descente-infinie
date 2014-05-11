@@ -37,7 +37,7 @@ let get_des_ids (hyp_type:constr) (id:identifier) (num_params:int) =
       (
       match kind_of_term c with
       | (Rel _ | Sort _ | Const _ | Construct _ | Ind _ | Prod _ | LetIn _ | Lambda _
-         | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _) -> None
+         | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _ | Proj _) -> None
       | Var id -> Some id
       | App (_,al) ->
                       (Array.fold_left
@@ -52,6 +52,7 @@ let get_des_ids (hyp_type:constr) (id:identifier) (num_params:int) =
     let cl = Array.to_list (Array.sub a num_params (len - num_params)) in
     let il = List.fold_left (fun a c -> match c with |None -> a |Some id -> id::a) [] (List.map extract_id cl) in
     il
+  | _ -> assert false
 
 let get_current_context () =
     try Pfedit.get_current_goal_context ()
@@ -70,9 +71,9 @@ let is_recursive (ind:inductive) (c:constr) =
     (
     match kind_of_term c with
     | (Rel _ | Var _   | Sort _ | Const _ | Construct _
-       | Cast _ | Evar _ | Meta _ | LetIn _ | Case _ | Fix _ | CoFix _) -> 0
+       | Cast _ | Evar _ | Meta _ | LetIn _ | Case _ | Fix _ | CoFix _ | Proj _) -> 0
 
-    | Ind i -> if i=ind then 1 else 0
+    | Ind (i, _) -> if eq_ind i ind then 1 else 0
 
     | Prod (na,t,c) -> (count_ind t) + (count_ind c)
     | Lambda (na,t,c) -> (count_ind t) + (count_ind c)
@@ -113,6 +114,7 @@ let rec ids_of_pattern (_,ip) =
   | IntroIdentifier id -> [id]
   | IntroFresh id -> [id]
   | IntroAnonymous -> []
+  | IntroInjection _ | IntroForthcoming _ -> []
 
 
 (* This function returns the list of hypotheses that are related to the
@@ -126,7 +128,7 @@ let find_ids_to_revert hyps id :identifier list=
     (
     match kind_of_term c with
     | (Rel _ | Sort _ | Const _ | Construct _ | Ind _
-       | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _) -> false
+       | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _ | Proj _) -> false
     | LetIn (_,_,_,c) -> occurs_in id c
     | Var v -> v = id
     | Prod (_,_,c) -> occurs_in id c
@@ -156,6 +158,7 @@ let find_ids_to_revert hyps id :identifier list=
       else if (ids_occur_in ids c) then
         (change_flag, n::new_ids, true::new_flags)
       else (change_flag, new_ids, false::new_flags)
+    | _ -> assert false
    in
    let rec mark_till_no_change ids hyps flags :bool list=
      let (change_flag, new_ids, new_flags) = mark ids hyps flags in
@@ -229,7 +232,7 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
     let pat = (Loc.ghost, IntroOrAndPattern pl) in
     tclTHENS
       (Proofview.V82.of_tactic
-         (new_destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some pat) None))
+         (destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some pat) None))
       tacs gl
 
 (* find out whether the variables that are going to be introed by "destruct" are of
@@ -269,7 +272,7 @@ let di_tac3 id k gl =
   let io = get_inductive dec_arg_type in
   match io with
   | None -> print_string "not an inductive product\n"; tclIDTAC gl
-  | Some ind ->
+  | Some (ind, ctx) ->
     let numcons = Array.length (snd (Global.lookup_inductive ind)).mind_consnames in
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
     let constructors = get_constructors ind numcons in
@@ -350,7 +353,7 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
                      with e -> print_string "list combine error at destruct_on_pattern2 3\n"; raise e in
       let (taclist, pl) = iter_or_branch com_list in
       let dp = (loc, IntroOrAndPattern pl) in
-      tclTHENS (Proofview.V82.of_tactic (new_destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some dp) None)) taclist gl
+      tclTHENS (Proofview.V82.of_tactic (destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some dp) None)) taclist gl
 
   | _ -> print_string "wrong pattern"; tclIDTAC gl
 
@@ -366,7 +369,7 @@ let di_tac4 id ip ip2 gl =
   let io = get_inductive dec_arg_type in
   match io with
   | None -> print_string "not an inductive product\n"; tclIDTAC gl
-  | Some ind ->
+  | Some (ind, ctx) ->
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
     let tmp = get_des_ids dec_arg_type id num_params in
     let des_ids = List.append tmp [id] in
