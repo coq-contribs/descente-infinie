@@ -12,6 +12,8 @@ open Pp
 open Genarg
 open Misctypes
 
+DECLARE PLUGIN "di"
+
 exception DIPatError of string
 
 let get_inductive (c:constr) =
