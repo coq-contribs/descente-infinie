@@ -285,7 +285,7 @@ let di_tac3 id k gl =
     let temp_ids = cut_list_at id ids_to_rev in
     let ids_to_apply = sublist temp_ids 0 ((List.length temp_ids) - 1) in
     let itfs = List.map (fun ct -> get_introtypeflags ind is_dep ct num_params) constypes in
-    (tclTHEN (revert ids_to_rev) (tclTHEN (fix (Some fixid) index) (tclTHEN (Proofview.V82.of_tactic intros)
+    (tclTHEN (Proofview.V82.of_tactic (revert ids_to_rev)) (tclTHEN (fix (Some fixid) index) (tclTHEN (Proofview.V82.of_tactic intros)
 
      (destruct_to_depth id rec_flags fixid k 0 de_ids ids_to_apply itfs None)
 
@@ -375,7 +375,7 @@ let di_tac4 id ip ip2 gl =
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
     let tmp = get_des_ids dec_arg_type id num_params in
     let des_ids = List.append tmp [id] in
-    (tclTHEN (revert ids_to_rev) (tclTHEN (fix (Some fixid) index) (tclTHEN (Proofview.V82.of_tactic (intros_using ids_to_rev))
+    (tclTHEN (Proofview.V82.of_tactic (revert ids_to_rev)) (tclTHEN (fix (Some fixid) index) (tclTHEN (Proofview.V82.of_tactic (intros_using ids_to_rev))
 
      (destruct_on_pattern2 id ids_to_avoid (ip,ip2) fixid des_ids ids_to_rev)
 
