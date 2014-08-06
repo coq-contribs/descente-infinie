@@ -216,7 +216,7 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                       let term = mkApp ((mkVar fixid), ids_to_app) in
                       let hyp_id = fresh_id (!hypids_ref) (id_of_string "IH") gl in
                       hypids_ref := hyp_id::(!hypids_ref);
-                      let tac = Tactics.forward None (Some (Loc.ghost, IntroIdentifier hyp_id)) term in
+                      let tac = Tactics.pose_proof (Name hyp_id) term in
                       tac
                    )
                    subterms
@@ -234,7 +234,7 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
     let pat = (Loc.ghost, IntroOrAndPattern pl) in
     tclTHENS
       (Proofview.V82.of_tactic
-         (destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some pat) None))
+         (destruct false [None, ElimOnIdent (Loc.ghost, id)] None (None, Some pat) None))
       tacs gl
 
 (* find out whether the variables that are going to be introed by "destruct" are of
@@ -325,7 +325,7 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
                                         with _ -> x) ids_to_rev in
                let app_arg = List.map (fun x -> mkVar x) (cut_list_at id1 replaced) in
                let term = mkApp ((mkVar fixid), (Array.of_list app_arg)) in
-               let tac = Tactics.forward None (Some (Loc.ghost, IntroIdentifier id2)) term in
+               let tac = Tactics.pose_proof (Name id2) term in
                  iter_and_branch rest ((loc,p)::patbuf) (tac::tacbuf) replace_ids
 
            | _ -> raise (DIPatError "unexpected pattern")
@@ -355,7 +355,7 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
                      with e -> print_string "list combine error at destruct_on_pattern2 3\n"; raise e in
       let (taclist, pl) = iter_or_branch com_list in
       let dp = (loc, IntroOrAndPattern pl) in
-      tclTHENS (Proofview.V82.of_tactic (destruct false [ElimOnIdent (Loc.ghost, id)] None (None, Some dp) None)) taclist gl
+      tclTHENS (Proofview.V82.of_tactic (destruct false [None,ElimOnIdent (Loc.ghost, id)] None (None, Some dp) None)) taclist gl
 
   | _ -> print_string "wrong pattern"; tclIDTAC gl
 
