@@ -110,14 +110,15 @@ let rec sublist l starting_index length =
 
 let rec ids_of_pattern (_,ip) =
   match ip with
-  | IntroOrAndPattern oap -> (List.fold_left (fun a pl -> List.append a ((List.fold_left (fun a p-> List.append a (ids_of_pattern p)) [] pl))) [] oap)
-  | IntroWildcard -> []
-  | IntroRewrite b -> []
-  | IntroIdentifier id -> [id]
-  | IntroFresh id -> [id]
-  | IntroAnonymous -> []
-  | IntroInjection _ | IntroForthcoming _ -> []
-
+  | IntroAction (IntroOrAndPattern oap) -> (List.fold_left (fun a pl -> List.append a ((List.fold_left (fun a p-> List.append a (ids_of_pattern p)) [] pl))) [] oap)
+  | IntroNaming IntroWildcard -> []
+  | IntroAction (IntroRewrite b) -> []
+  | IntroNaming (IntroIdentifier id) -> [id]
+  | IntroNaming (IntroFresh id) -> [id]
+  | IntroNaming IntroAnonymous -> []
+  | IntroAction (IntroInjection _) -> []
+  | IntroForthcoming _ -> []
+  | IntroAction (IntroApplyOn (c,pat)) -> ids_of_pattern pat
 
 (* This function returns the list of hypotheses that are related to the
    hypothesis with the id "id". Two hypotheses are related to each other
@@ -224,14 +225,14 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                let for_tac = tclTHENLIST (List.map Proofview.V82.of_tactic forward_tacs) in
                let tac = destruct_to_depth (List.hd subterms) rec_flags fixid to_depth (current_dep+1)
                          de_ids ids_to_apply itfs (Some for_tac) in
-               let pl = List.map (fun id -> (Loc.ghost, IntroIdentifier id)) fresh_ids in
+               let pl = List.map (fun id -> (Loc.ghost, IntroNaming (IntroIdentifier id))) fresh_ids in
                (pl, tac)
              else ([], clear [fixid])
           )
           rec_intro_flags
         )
     in
-    let pat = (Loc.ghost, IntroOrAndPattern pl) in
+    let pat = (Loc.ghost, pl) in
     tclTHENS
       (Proofview.V82.of_tactic
          (destruct false [None, ElimOnIdent (Loc.ghost, id)] None (None, Some pat) None))
@@ -301,16 +302,16 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
     | ((loc,p),(loc2,p2))::rest ->
            (
            match (p, p2) with
-           | (IntroOrAndPattern ioap, _) -> (* if it's another pattern at one level below, we need to find a name for it one level above *)
+           | (IntroAction (IntroOrAndPattern ioap), _) -> (* if it's another pattern at one level below, we need to find a name for it one level above *)
                let new_id = fresh_id !ids_to_avoid id gl in
                  ids_to_avoid := new_id::!ids_to_avoid;
                  idref := Some (new_id, (loc,p), (loc2,p2));
-                 iter_and_branch rest ((loc, IntroIdentifier new_id)::patbuf) tacbuf replace_ids
+                 iter_and_branch rest ((loc, IntroNaming (IntroIdentifier new_id))::patbuf) tacbuf replace_ids
 
-           | (IntroIdentifier id1, IntroAnonymous) ->
+           | (IntroNaming (IntroIdentifier id1), IntroNaming IntroAnonymous) ->
                iter_and_branch rest ((loc,p)::patbuf) tacbuf (id1::replace_ids)
 
-           | (IntroIdentifier id1, IntroIdentifier id2) ->
+           | (IntroNaming (IntroIdentifier id1), IntroNaming (IntroIdentifier id2)) ->
                let rep_ids = List.rev (id1::replace_ids) in
                let com_list = try (List.combine des_ids rep_ids)
                                    with e -> print_string "list combine error at destruct_on_pattern2 1\n";
@@ -350,11 +351,11 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
           (tac::l1, patlist::l2)
   in
   match (pat, pat2) with
-  | (IntroOrAndPattern ipll, IntroOrAndPattern ipll2) ->
+  | (IntroAction (IntroOrAndPattern ipll), IntroAction (IntroOrAndPattern ipll2)) ->
       let com_list = try List.combine ipll ipll2
                      with e -> print_string "list combine error at destruct_on_pattern2 3\n"; raise e in
       let (taclist, pl) = iter_or_branch com_list in
-      let dp = (loc, IntroOrAndPattern pl) in
+      let dp = (loc, pl) in
       tclTHENS (Proofview.V82.of_tactic (destruct false [None,ElimOnIdent (Loc.ghost, id)] None (None, Some dp) None)) taclist gl
 
   | _ -> print_string "wrong pattern"; tclIDTAC gl
