@@ -111,7 +111,7 @@ let rec sublist l starting_index length =
 let rec ids_of_pattern (_,ip) =
   match ip with
   | IntroAction (IntroOrAndPattern oap) -> (List.fold_left (fun a pl -> List.append a ((List.fold_left (fun a p-> List.append a (ids_of_pattern p)) [] pl))) [] oap)
-  | IntroNaming IntroWildcard -> []
+  | IntroAction IntroWildcard -> []
   | IntroAction (IntroRewrite b) -> []
   | IntroNaming (IntroIdentifier id) -> [id]
   | IntroNaming (IntroFresh id) -> [id]
