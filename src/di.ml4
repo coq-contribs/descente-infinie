@@ -270,7 +270,7 @@ let di_tac3 id k gl =
   let ids_to_rev = find_ids_to_revert hyps id in
   let index = (find_index id ids_to_rev 0)+1 in
   let fixid = fresh_id [] (id_of_string "circ") gl in
-  let dec_arg_type = pf_type_of gl (mkVar id) in
+  let dec_arg_type = pf_unsafe_type_of gl (mkVar id) in
   let io = get_inductive dec_arg_type in
   match io with
   | None -> print_string "not an inductive product\n"; tclIDTAC gl
@@ -278,7 +278,7 @@ let di_tac3 id k gl =
     let numcons = Array.length (snd (Global.lookup_inductive ind)).mind_consnames in
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
     let constructors = get_constructors ind numcons in
-    let constypes = List.map (Typing.type_of env evmap) constructors in
+    let constypes = List.map (Typing.unsafe_type_of env evmap) constructors in
     let rec_flags = List.map (is_recursive ind) constypes in
     let de_ids = get_des_ids dec_arg_type id num_params in
     let is_dep = is_dependent dec_arg_type in
@@ -367,7 +367,7 @@ let di_tac4 id ip ip2 gl =
   let index = (find_index id ids_to_rev 0)+1 in
   let ids_to_avoid = ref (List.append (ids_of_pattern ip) (ids_of_pattern ip2)) in
   let fixid = fresh_id [] (id_of_string "circ") gl in
-  let dec_arg_type = pf_type_of gl (mkVar id) in
+  let dec_arg_type = pf_unsafe_type_of gl (mkVar id) in
   let io = get_inductive dec_arg_type in
   match io with
   | None -> print_string "not an inductive product\n"; tclIDTAC gl
