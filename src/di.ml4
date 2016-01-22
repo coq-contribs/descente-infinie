@@ -110,7 +110,8 @@ let rec sublist l starting_index length =
 
 let rec ids_of_pattern (_,ip) =
   match ip with
-  | IntroAction (IntroOrAndPattern oap) -> (List.fold_left (fun a pl -> List.append a ((List.fold_left (fun a p-> List.append a (ids_of_pattern p)) [] pl))) [] oap)
+  | IntroAction (IntroOrAndPattern (IntroOrPattern oap)) -> (List.fold_left (fun a pl -> List.append a ((List.fold_left (fun a p-> List.append a (ids_of_pattern p)) [] pl))) [] oap)
+  | IntroAction (IntroOrAndPattern (IntroAndPattern pl)) -> List.fold_left (fun a p-> List.append a (ids_of_pattern p)) [] pl
   | IntroAction IntroWildcard -> []
   | IntroAction (IntroRewrite b) -> []
   | IntroNaming (IntroIdentifier id) -> [id]
@@ -232,7 +233,7 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
           rec_intro_flags
         )
     in
-    let pat = (Loc.ghost, pl) in
+    let pat = (Loc.ghost, IntroOrPattern pl) in
     tclTHENS
       (Proofview.V82.of_tactic (destruct false None (mkVar id) (Some pat) None))
       tacs gl
@@ -351,10 +352,12 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
   in
   match (pat, pat2) with
   | (IntroAction (IntroOrAndPattern ipll), IntroAction (IntroOrAndPattern ipll2)) ->
+    let ipll = match ipll with IntroOrPattern ll -> ll | IntroAndPattern l -> [l] in
+    let ipll2 = match ipll2 with IntroOrPattern ll -> ll | IntroAndPattern l -> [l] in
       let com_list = try List.combine ipll ipll2
                      with e -> print_string "list combine error at destruct_on_pattern2 3\n"; raise e in
       let (taclist, pl) = iter_or_branch com_list in
-      let dp = (loc, pl) in
+      let dp = (loc, IntroOrPattern pl) in
       tclTHENS (Proofview.V82.of_tactic (destruct false None (mkVar id) (Some dp) None)) taclist gl
 
   | _ -> print_string "wrong pattern"; tclIDTAC gl
