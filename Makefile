@@ -19,7 +19,6 @@
 
 .DEFAULT_GOAL := all
 
-# 
 # This Makefile may take arguments passed as environment variables:
 # COQBIN to specify the directory where Coq binaries resides;
 # TIMECMD set a command to log .v compilation time;
@@ -35,10 +34,14 @@ endef
 includecmdwithout@ = $(eval $(subst @,$(donewline),$(shell { $(1) | tr -d '\r' | tr '\n' '@'; })))
 $(call includecmdwithout@,$(COQBIN)coqtop -config)
 
-TIMED=
-TIMECMD=
-STDTIME?=/usr/bin/time -f "$* (user: %U mem: %M ko)"
+TIMED?=
+TIMECMD?=
+STDTIME=/usr/bin/time -f "$* (user: %U mem: %M ko)"
 TIMER=$(if $(TIMED), $(STDTIME), $(TIMECMD))
+
+vo_to_obj = $(addsuffix .o,\
+  $(filter-out Warning: Error:,\
+  $(shell $(COQBIN)coqtop -q -noinit -batch -quiet -print-mod-uid $(1))))
 
 ##########################
 #                        #
@@ -59,21 +62,21 @@ COQDOCLIBS?=\
 #                        #
 ##########################
 
-CAMLP4OPTIONS=-loc loc
 COQDOC=$(COQBIN)coqdoc -interpolate -utf8
+CAMLP4OPTIONS=-loc loc
 
 OPT?=
 COQDEP?="$(COQBIN)coqdep" -c
 COQSRCLIBS?=-I "$(COQLIB)kernel" -I "$(COQLIB)lib" \
-  -I "$(COQLIB)library" -I "$(COQLIB)parsing" -I "$(COQLIB)pretyping" \
+  -I "$(COQLIB)library" -I "$(COQLIB)parsing" -I "$(COQLIB)engine" -I "$(COQLIB)pretyping" \
   -I "$(COQLIB)interp" -I "$(COQLIB)printing" -I "$(COQLIB)intf" \
   -I "$(COQLIB)proofs" -I "$(COQLIB)tactics" -I "$(COQLIB)tools" \
   -I "$(COQLIB)toplevel" -I "$(COQLIB)stm" -I "$(COQLIB)grammar" \
   -I "$(COQLIB)config" \
-  -I "$(COQLIB)/plugins/Derive" \
   -I "$(COQLIB)/plugins/btauto" \
   -I "$(COQLIB)/plugins/cc" \
   -I "$(COQLIB)/plugins/decl_mode" \
+  -I "$(COQLIB)/plugins/derive" \
   -I "$(COQLIB)/plugins/extraction" \
   -I "$(COQLIB)/plugins/firstorder" \
   -I "$(COQLIB)/plugins/fourier" \
@@ -89,17 +92,18 @@ COQSRCLIBS?=-I "$(COQLIB)kernel" -I "$(COQLIB)lib" \
   -I "$(COQLIB)/plugins/xml"
 ZFLAGS=$(OCAMLLIBS) $(COQSRCLIBS) -I $(CAMLP4LIB)
 
-CAMLC?=$(OCAMLC) -c -rectypes -thread
-CAMLOPTC?=$(OCAMLOPT) -c -rectypes -thread
-CAMLLINK?=$(OCAMLC) -rectypes -thread
-CAMLOPTLINK?=$(OCAMLOPT) -rectypes -thread
+CAMLC?=$(OCAMLFIND) ocamlc -c -rectypes -thread
+CAMLOPTC?=$(OCAMLFIND) opt -c -rectypes -thread
+CAMLLINK?=$(OCAMLFIND) ocamlc -rectypes -thread
+CAMLOPTLINK?=$(OCAMLFIND) opt -rectypes -thread
+CAMLLIB?=$(shell $(OCAMLFIND) printconf stdlib)
 GRAMMARS?=grammar.cma
 ifeq ($(CAMLP4),camlp5)
 CAMLP4EXTEND=pa_extend.cmo q_MLast.cmo pa_macro.cmo unix.cma threads.cma
 else
-CAMLP4EXTEND=
+CAMLP4EXTEND=threads.cma
 endif
-PP?=-pp '$(CAMLP4O) -I $(CAMLLIB) -I $(CAMLLIB)threads/ $(COQSRCLIBS) compat5.cmo \
+PP?=-pp '$(CAMLP4O) -I $(CAMLLIB) -I $(CAMLLIB)/threads/ $(COQSRCLIBS) compat5.cmo \
   $(CAMLP4EXTEND) $(GRAMMARS) $(CAMLP4OPTIONS) -impl'
 
 ##################
@@ -126,17 +130,38 @@ endif
 
 ML4FILES:=src/di.ml4
 
+ifneq ($(filter-out archclean clean cleanall printenv,$(MAKECMDGOALS)),)
 -include $(addsuffix .d,$(ML4FILES))
+else
+ifeq ($(MAKECMDGOALS),)
+-include $(addsuffix .d,$(ML4FILES))
+endif
+endif
+
 .SECONDARY: $(addsuffix .d,$(ML4FILES))
 
 MLFILES:=src/di_plugin_mod.ml
 
+ifneq ($(filter-out archclean clean cleanall printenv,$(MAKECMDGOALS)),)
 -include $(addsuffix .d,$(MLFILES))
+else
+ifeq ($(MAKECMDGOALS),)
+-include $(addsuffix .d,$(MLFILES))
+endif
+endif
+
 .SECONDARY: $(addsuffix .d,$(MLFILES))
 
 MLLIBFILES:=src/di_plugin.mllib
 
+ifneq ($(filter-out archclean clean cleanall printenv,$(MAKECMDGOALS)),)
 -include $(addsuffix .d,$(MLLIBFILES))
+else
+ifeq ($(MAKECMDGOALS),)
+-include $(addsuffix .d,$(MLLIBFILES))
+endif
+endif
+
 .SECONDARY: $(addsuffix .d,$(MLLIBFILES))
 
 ALLCMOFILES:=$(ML4FILES:.ml4=.cmo) $(MLFILES:.ml=.cmo)
@@ -169,7 +194,7 @@ endif
 
 all: $(CMOFILES) $(CMAFILES) $(if $(HASNATDYNLINK_OR_EMPTY),$(CMXSFILES)) 
 
-.PHONY: all opt byte archclean clean install uninstall_me.sh uninstall userinstall depend html validate
+.PHONY: all archclean beautify byte clean cleanall gallina gallinahtml html install install-doc install-natdynlink install-toploop opt printenv quick uninstall userinstall validate vio2vo
 
 ####################
 #                  #
@@ -197,7 +222,7 @@ install-natdynlink:
 
 install-toploop: $(MLLIBFILES:.mllib=.cmxs)
 	 install -d "$(DSTROOT)"$(COQTOPINSTALL)/
-	 install -m 0644 $?  "$(DSTROOT)"$(COQTOPINSTALL)/
+	 install -m 0755 $?  "$(DSTROOT)"$(COQTOPINSTALL)/
 
 install:$(if $(HASNATDYNLINK_OR_EMPTY),install-natdynlink)
 	cd "src" && for i in $(CMAFILES1) $(CMIFILES1) $(CMOFILES1); do \
@@ -210,8 +235,8 @@ install:$(if $(HASNATDYNLINK_OR_EMPTY),install-natdynlink)
 
 install-doc:
 
-uninstall_me.sh:
-	echo '#!/bin/sh' > $@ 
+uninstall_me.sh: Makefile
+	echo '#!/bin/sh' > $@
 	printf 'cd "$${DSTROOT}"$(COQLIBINSTALL)/DescenteInfinie && rm -f $(CMXSFILES1) && \\\nfor i in $(CMXSFILESINC); do rm -f "`basename "$$i"`"; done && find . -type d -and -empty -delete\ncd "$${DSTROOT}"$(COQLIBINSTALL) && find "DescenteInfinie" -maxdepth 0 -and -empty -exec rmdir -p \{\} \;\n' >> "$@"
 	printf 'cd "$${DSTROOT}"$(COQLIBINSTALL)/DescenteInfinie && rm -f $(CMAFILES1) $(CMIFILES1) $(CMOFILES1) && \\\nfor i in $(CMAFILESINC) $(CMIFILESINC) $(CMOFILESINC); do rm -f "`basename "$$i"`"; done && find . -type d -and -empty -delete\ncd "$${DSTROOT}"$(COQLIBINSTALL) && find "DescenteInfinie" -maxdepth 0 -and -empty -exec rmdir -p \{\} \;\n' >> "$@"
 	chmod +x $@
@@ -219,20 +244,19 @@ uninstall_me.sh:
 uninstall: uninstall_me.sh
 	sh $<
 
-clean:
+clean::
 	rm -f $(ALLCMOFILES) $(CMIFILES) $(CMAFILES)
 	rm -f $(ALLCMOFILES:.cmo=.cmx) $(CMXAFILES) $(CMXSFILES) $(ALLCMOFILES:.cmo=.o) $(CMXAFILES:.cmxa=.a)
 	rm -f $(addsuffix .d,$(MLFILES) $(MLIFILES) $(ML4FILES) $(MLLIBFILES) $(MLPACKFILES))
 	rm -f all.ps all-gal.ps all.pdf all-gal.pdf all.glob $(VFILES:.v=.glob) $(VFILES:.v=.tex) $(VFILES:.v=.g.tex) all-mli.tex
 	- rm -rf html mlihtml uninstall_me.sh
 
-archclean:
+archclean::
 	rm -f *.cmx *.o
 
 printenv:
 	@"$(COQBIN)coqtop" -config
-	@echo 'CAMLC =	$(CAMLC)'
-	@echo 'CAMLOPTC =	$(CAMLOPTC)'
+	@echo 'OCAMLFIND =	$(OCAMLFIND)'
 	@echo 'PP =	$(PP)'
 	@echo 'COQFLAGS =	$(COQFLAGS)'
 	@echo 'COQLIBINSTALL =	$(COQLIBINSTALL)'
@@ -256,7 +280,7 @@ $(filter-out $(addsuffix .cmx,$(foreach lib,$(MLPACKFILES:.mlpack=_MLPACK_DEPEND
 	$(CAMLOPTC) $(ZDEBUG) $(ZFLAGS) $(PP) -impl $<
 
 $(addsuffix .d,$(ML4FILES)): %.ml4.d: %.ml4
-	$(COQDEP) $(OCAMLLIBS) "$<" > "$@" || ( RV=$$?; rm -f "$@"; exit $${RV} )
+	$(OCAMLFIND) ocamldep -slash $(OCAMLLIBS) $(PP) -impl "$<" > "$@" || ( RV=$$?; rm -f "$@"; exit $${RV} )
 
 $(MLFILES:.ml=.cmo): %.cmo: %.ml
 	$(CAMLC) $(ZDEBUG) $(ZFLAGS) $<
@@ -265,7 +289,7 @@ $(filter-out $(addsuffix .cmx,$(foreach lib,$(MLPACKFILES:.mlpack=_MLPACK_DEPEND
 	$(CAMLOPTC) $(ZDEBUG) $(ZFLAGS) $<
 
 $(addsuffix .d,$(MLFILES)): %.ml.d: %.ml
-	$(OCAMLDEP) -slash $(OCAMLLIBS) "$<" > "$@" || ( RV=$$?; rm -f "$@"; exit $${RV} )
+	$(OCAMLFIND) ocamldep -slash $(OCAMLLIBS) "$<" > "$@" || ( RV=$$?; rm -f "$@"; exit $${RV} )
 
 $(filter-out $(MLLIBFILES:.mllib=.cmxs),$(MLFILES:.ml=.cmxs) $(ML4FILES:.ml4=.cmxs) $(MLPACKFILES:.mlpack=.cmxs)): %.cmxs: %.cmx
 	$(CAMLOPTLINK) $(ZDEBUG) $(ZFLAGS) -shared -o $@ $<
@@ -280,7 +304,7 @@ $(MLLIBFILES:.mllib=.cmxa): %.cmxa: | %.mllib
 	$(CAMLOPTLINK) $(ZDEBUG) $(ZFLAGS) -a -o $@ $^
 
 $(addsuffix .d,$(MLLIBFILES)): %.mllib.d: %.mllib
-	$(COQDEP) $(OCAMLLIBS) "$<" > "$@" || ( RV=$$?; rm -f "$@"; exit $${RV} )
+	$(COQDEP) $(OCAMLLIBS) -c "$<" > "$@" || ( RV=$$?; rm -f "$@"; exit $${RV} )
 
 # WARNING
 #
