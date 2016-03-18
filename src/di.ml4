@@ -10,6 +10,8 @@ open Declarations
 open Tacexpr
 open Pp
 open Genarg
+open Constrarg
+open Extraargs
 open Misctypes
 open Context.Named.Declaration
 open Util
@@ -400,5 +402,5 @@ let di_tac6 ce k gl =
 (* grammar declarations which hook the tactic to the proof engine *)
 TACTIC EXTEND di
 | ["di" constr(ce) natural(k)] -> [Proofview.V82.tactic (di_tac6 ce k)]
-| ["di" constr(ce) "as" simple_intropattern(ip) "hyps" simple_intropattern(ip2)] -> [Proofview.V82.tactic (di_tac5 ce ip ip2)]
+| ["di" constr(ce) "as" intropattern(ip) "hyps" intropattern(ip2)] -> [Proofview.V82.tactic (di_tac5 ce ip ip2)]
 END
