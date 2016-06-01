@@ -184,8 +184,8 @@ let find_ids_to_revert hyps id :identifier list=
 let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_apply itfs tac_opt gl =
   if current_dep = to_depth then
                      (match tac_opt with
-                      | None -> (clear [fixid]) gl
-                      | Some tac -> tclTHEN tac (clear [fixid]) gl)
+                      | None -> Proofview.V82.of_tactic (clear [fixid]) gl
+                      | Some tac -> tclTHEN tac (Proofview.V82.of_tactic (clear [fixid])) gl)
   else
     let rec_intro_flags = List.combine rec_flags itfs in
     let (pl, tacs) =
@@ -233,7 +233,7 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                          de_ids ids_to_apply itfs (Some for_tac) in
                let pl = List.map (fun id -> (Loc.ghost, IntroNaming (IntroIdentifier id))) fresh_ids in
                (pl, tac)
-             else ([], clear [fixid])
+             else ([], Proofview.V82.of_tactic (clear [fixid]))
           )
           rec_intro_flags
         )
@@ -291,12 +291,9 @@ let di_tac3 id k gl =
     let temp_ids = cut_list_at id ids_to_rev in
     let ids_to_apply = sublist temp_ids 0 ((List.length temp_ids) - 1) in
     let itfs = List.map (fun ct -> get_introtypeflags ind is_dep ct num_params) constypes in
-    (tclTHEN (Proofview.V82.of_tactic (revert ids_to_rev)) (tclTHEN (fix (Some fixid) index) (tclTHEN (Proofview.V82.of_tactic intros)
-
-     (destruct_to_depth id rec_flags fixid k 0 de_ids ids_to_apply itfs None)
-
-    ))) gl
-
+    Proofview.V82.of_tactic (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix (Some fixid) index; intros;
+     (Proofview.V82.tactic (destruct_to_depth id rec_flags fixid k 0 de_ids ids_to_apply itfs None))])
+     gl
 
 
 let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_ids ids_to_rev gl =
@@ -352,7 +349,7 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
              let tac = tclTHENLIST (List.map Proofview.V82.of_tactic taclist) in
                 ((tclTHEN tac (destruct_on_pattern2 nid ids_to_avoid (patt,patt2) fixid des_ids ids_to_rev))::l1, patlist::l2)
       | None ->
-          let tac = tclTHENLIST (List.append (List.map Proofview.V82.of_tactic taclist) [clear [fixid]]) in
+          let tac = Proofview.V82.of_tactic (Tacticals.New.tclTHENLIST (List.append taclist [clear [fixid]])) in
           (tac::l1, patlist::l2)
   in
   match (pat, pat2) with
@@ -383,11 +380,10 @@ let di_tac4 id ip ip2 gl =
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
     let tmp = get_des_ids dec_arg_type id num_params in
     let des_ids = List.append tmp [id] in
-    (tclTHEN (Proofview.V82.of_tactic (revert ids_to_rev)) (tclTHEN (fix (Some fixid) index) (tclTHEN (Proofview.V82.of_tactic (intros_using ids_to_rev))
-
-     (destruct_on_pattern2 id ids_to_avoid (ip,ip2) fixid des_ids ids_to_rev)
-
-    ))) gl
+    Proofview.V82.of_tactic
+     (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix (Some fixid) index; intros_using ids_to_rev;
+       (Proofview.V82.tactic (destruct_on_pattern2 id ids_to_avoid (ip,ip2) fixid des_ids ids_to_rev))])
+    gl
 
 let di_tac5 ce ip ip2 gl =
   match kind_of_term ce with
