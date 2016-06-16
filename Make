@@ -1,4 +1,8 @@
--I src
+## PL: the -I leads currently to a error at make install
+## This deserves a better fix, since using only -R leads to
+## an empty (but successfull) install
+
+# -I src
 -R src DescenteInfinie
 
 COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"
