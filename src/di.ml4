@@ -175,7 +175,7 @@ let find_ids_to_revert hyps id :identifier list=
        mark_till_no_change (List.append ids new_ids) hyps new_flags
      else new_flags
    in
-   let c = get_type (List.find (Id.equal id % get_id) hyps) in
+   let c = get_type (List.find (get_id %> Id.equal id) hyps) in
    let (hyp_ids:identifier list) = List.map get_id hyps in
    let ids = id::(List.fold_left (fun a n -> if (occurs_in n c) then n::a else a) [] hyp_ids) in
    let (flags:bool list) = mark_till_no_change ids hyps (false_list (List.length hyps)) in
