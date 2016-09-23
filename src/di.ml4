@@ -10,7 +10,7 @@ open Declarations
 open Tacexpr
 open Pp
 open Genarg
-open Constrarg
+open Stdarg
 open Extraargs
 open Misctypes
 open Context.Named.Declaration
