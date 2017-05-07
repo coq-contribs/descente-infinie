@@ -4,6 +4,7 @@
 open Refiner
 open Tactics
 open Term
+open EConstr
 open Names
 open Tacmach
 open Declarations
@@ -20,28 +21,28 @@ DECLARE PLUGIN "di"
 
 exception DIPatError of string
 
-let get_inductive (c:constr) =
-  match kind_of_term c with
+let get_inductive sigma (c:constr) =
+  match kind sigma c with
   | Ind i -> Some i
   | App (ac, _) ->
-    (match kind_of_term ac with
+    (match kind sigma ac with
      | Ind i -> Some i
      | _ -> None)
   | _ -> None
 
-let is_dependent (c:constr) =
-  match kind_of_term c with
+let is_dependent sigma (c:constr) =
+  match kind sigma c with
   | App _ -> true
   | _ -> false
 
-let get_des_ids (hyp_type:constr) (id:identifier) (num_params:int) =
-  match kind_of_term hyp_type with
+let get_des_ids sigma (hyp_type:constr) (id:identifier) (num_params:int) =
+  match kind sigma hyp_type with
   | Ind _ -> []
   | App (_, a) ->
     let len = Array.length a in
     let rec extract_id c =
       (
-      match kind_of_term c with
+      match kind sigma c with
       | (Rel _ | Sort _ | Const _ | Construct _ | Ind _ | Prod _ | LetIn _ | Lambda _
          | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _ | Proj _) -> None
       | Var id -> Some id
@@ -72,10 +73,10 @@ let get_constructors (i:inductive) n =
   in
   iter [] n
 
-let is_recursive (ind:inductive) (c:constr) =
+let is_recursive sigma (ind:inductive) (c:constr) =
   let rec count_ind (c:constr) =
     (
-    match kind_of_term c with
+    match kind sigma c with
     | (Rel _ | Var _   | Sort _ | Const _ | Construct _
        | Cast _ | Evar _ | Meta _ | LetIn _ | Case _ | Fix _ | CoFix _ | Proj _) -> 0
 
@@ -131,10 +132,10 @@ let rec ids_of_pattern (_,ip) =
    references to the same variable.
 *)
 
-let find_ids_to_revert hyps id :identifier list=
+let find_ids_to_revert sigma hyps id :identifier list=
   let rec occurs_in id c =
     (
-    match kind_of_term c with
+    match kind sigma c with
     | (Rel _ | Sort _ | Const _ | Construct _ | Ind _
        | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _ | Proj _) -> false
     | LetIn (_,_,_,c) -> occurs_in id c
@@ -246,18 +247,18 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
 (* find out whether the variables that are going to be introed by "destruct" are of
    the same type as the decreasing argument
  *)
-let rec get_introtypeflags ind is_dep constype nparams =
-  match kind_of_term constype with
+let rec get_introtypeflags sigma ind is_dep constype nparams =
+  match kind sigma constype with
   | Prod (_,t,b) ->
-      if nparams > 0 then get_introtypeflags ind is_dep b (nparams - 1)
+      if nparams > 0 then get_introtypeflags sigma ind is_dep b (nparams - 1)
       else
         if is_dep then
           (
-          match kind_of_term t with
-          | App (c, _) -> (c = mkInd ind)::(get_introtypeflags ind is_dep b (nparams - 1))
-          | _ -> false::(get_introtypeflags ind is_dep b (nparams - 1))
+          match kind sigma t with
+          | App (c, _) -> (c = mkInd ind)::(get_introtypeflags sigma ind is_dep b (nparams - 1))
+          | _ -> false::(get_introtypeflags sigma ind is_dep b (nparams - 1))
           )
-        else (t=mkInd ind)::(get_introtypeflags ind is_dep b (nparams - 1))
+        else (t=mkInd ind)::(get_introtypeflags sigma ind is_dep b (nparams - 1))
   | _ -> []
 
 
@@ -273,11 +274,11 @@ let rec cut_list_at x l =
 let di_tac3 id k gl =
   let (evmap, env) = get_current_context () in
   let hyps = pf_hyps gl in
-  let ids_to_rev = find_ids_to_revert hyps id in
+  let ids_to_rev = find_ids_to_revert evmap hyps id in
   let index = (find_index id ids_to_rev 0)+1 in
   let fixid = fresh_id [] (id_of_string "circ") gl in
   let dec_arg_type = pf_unsafe_type_of gl (mkVar id) in
-  let io = get_inductive dec_arg_type in
+  let io = get_inductive evmap dec_arg_type in
   match io with
   | None -> print_string "not an inductive product\n"; tclIDTAC gl
   | Some (ind, ctx) ->
@@ -285,12 +286,12 @@ let di_tac3 id k gl =
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
     let constructors = get_constructors ind numcons in
     let constypes = List.map (Typing.unsafe_type_of env evmap) constructors in
-    let rec_flags = List.map (is_recursive ind) constypes in
-    let de_ids = get_des_ids dec_arg_type id num_params in
-    let is_dep = is_dependent dec_arg_type in
+    let rec_flags = List.map (is_recursive evmap ind) constypes in
+    let de_ids = get_des_ids evmap dec_arg_type id num_params in
+    let is_dep = is_dependent evmap dec_arg_type in
     let temp_ids = cut_list_at id ids_to_rev in
     let ids_to_apply = sublist temp_ids 0 ((List.length temp_ids) - 1) in
-    let itfs = List.map (fun ct -> get_introtypeflags ind is_dep ct num_params) constypes in
+    let itfs = List.map (fun ct -> get_introtypeflags evmap ind is_dep ct num_params) constypes in
     Proofview.V82.of_tactic (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix (Some fixid) index; intros;
      (Proofview.V82.tactic (destruct_to_depth id rec_flags fixid k 0 de_ids ids_to_apply itfs None))])
      gl
@@ -368,17 +369,17 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
 let di_tac4 id ip ip2 gl =
   let (evmap, env) = get_current_context () in
   let hyps = pf_hyps gl in
-  let ids_to_rev = find_ids_to_revert hyps id in
+  let ids_to_rev = find_ids_to_revert evmap hyps id in
   let index = (find_index id ids_to_rev 0)+1 in
   let ids_to_avoid = ref (List.append (ids_of_pattern ip) (ids_of_pattern ip2)) in
   let fixid = fresh_id [] (id_of_string "circ") gl in
   let dec_arg_type = pf_unsafe_type_of gl (mkVar id) in
-  let io = get_inductive dec_arg_type in
+  let io = get_inductive evmap dec_arg_type in
   match io with
   | None -> print_string "not an inductive product\n"; tclIDTAC gl
   | Some (ind, ctx) ->
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
-    let tmp = get_des_ids dec_arg_type id num_params in
+    let tmp = get_des_ids evmap dec_arg_type id num_params in
     let des_ids = List.append tmp [id] in
     Proofview.V82.of_tactic
      (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix (Some fixid) index; intros_using ids_to_rev;
@@ -386,12 +387,12 @@ let di_tac4 id ip ip2 gl =
     gl
 
 let di_tac5 ce ip ip2 gl =
-  match kind_of_term ce with
+  match kind (project gl) ce with
   | Var id -> di_tac4 id ip ip2 gl
   | _ -> tclIDTAC gl
 
 let di_tac6 ce k gl =
-  match kind_of_term ce with
+  match kind (project gl) ce with
   | Var id -> di_tac3 id k gl
   | _ -> tclIDTAC gl
 
