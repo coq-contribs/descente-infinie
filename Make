@@ -2,7 +2,7 @@
 ## This deserves a better fix, since using only -R leads to
 ## an empty (but successfull) install
 
-# -I src
+-I src
 -R src DescenteInfinie
 
 COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"

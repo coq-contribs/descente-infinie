@@ -8,9 +8,7 @@ open EConstr
 open Names
 open Tacmach
 open Declarations
-open Tacexpr
 open Pp
-open Genarg
 open Stdarg
 open Extraargs
 open Misctypes
@@ -96,7 +94,7 @@ let rec find_index (id:identifier) (l:identifier list) current =
 
 
 (* get the sublist, first index is 0 *)
-let rec sublist l starting_index length =
+let sublist l starting_index length =
   let rec iter ind l =
     if ind = 0 then l
     else
@@ -232,14 +230,14 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                let for_tac = tclTHENLIST (List.map Proofview.V82.of_tactic forward_tacs) in
                let tac = destruct_to_depth (List.hd subterms) rec_flags fixid to_depth (current_dep+1)
                          de_ids ids_to_apply itfs (Some for_tac) in
-               let pl = List.map (fun id -> (Loc.ghost, IntroNaming (IntroIdentifier id))) fresh_ids in
+               let pl = List.map (fun id -> (None, IntroNaming (IntroIdentifier id))) fresh_ids in
                (pl, tac)
              else ([], Proofview.V82.of_tactic (clear [fixid]))
           )
           rec_intro_flags
         )
     in
-    let pat = (Loc.ghost, IntroOrPattern pl) in
+    let pat = (None, IntroOrPattern pl) in
     tclTHENS
       (Proofview.V82.of_tactic (destruct false None (mkVar id) (Some pat) None))
       tacs gl
