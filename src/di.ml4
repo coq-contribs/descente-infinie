@@ -8,7 +8,6 @@ open EConstr
 open Names
 open Tacmach
 open Declarations
-open Pp
 open Stdarg
 open Extraargs
 open Misctypes
@@ -33,7 +32,7 @@ let is_dependent sigma (c:constr) =
   | App _ -> true
   | _ -> false
 
-let get_des_ids sigma (hyp_type:constr) (id:identifier) (num_params:int) =
+let get_des_ids sigma (hyp_type:constr) (id:Id.t) (num_params:int) =
   match kind sigma hyp_type with
   | Ind _ -> []
   | App (_, a) ->
@@ -87,7 +86,7 @@ let is_recursive sigma (ind:inductive) (c:constr) =
   in
   if (count_ind c) = 1 then false else true
 
-let rec find_index (id:identifier) (l:identifier list) current =
+let rec find_index (id:Id.t) (l:Id.t list) current =
   match l with
   | [] -> -1
   | i::rest -> if id = i then current else (find_index id rest (current+1))
@@ -111,8 +110,8 @@ let sublist l starting_index length =
   in
   iter2 length (iter starting_index l)
 
-let rec ids_of_pattern (_,ip) =
-  match ip with
+let rec ids_of_pattern ip =
+  match ip.CAst.v with
   | IntroAction (IntroOrAndPattern (IntroOrPattern oap)) -> (List.fold_left (fun a pl -> List.append a ((List.fold_left (fun a p-> List.append a (ids_of_pattern p)) [] pl))) [] oap)
   | IntroAction (IntroOrAndPattern (IntroAndPattern pl)) -> List.fold_left (fun a p-> List.append a (ids_of_pattern p)) [] pl
   | IntroAction IntroWildcard -> []
@@ -130,7 +129,7 @@ let rec ids_of_pattern (_,ip) =
    references to the same variable.
 *)
 
-let find_ids_to_revert sigma hyps id :identifier list=
+let find_ids_to_revert sigma hyps id :Id.t list=
   let rec occurs_in id c =
     (
     match kind sigma c with
@@ -153,7 +152,7 @@ let find_ids_to_revert sigma hyps id :identifier list=
   let rec false_list n =
     if n = 0 then [] else false::(false_list (n-1))
   in
-  let rec mark (ids:identifier list) hyps flags =
+  let rec mark (ids:Id.t list) hyps flags =
     match (hyps, flags) with
     | ([],[]) -> (false, [], [])
     | (hyp::rest, flag::rest_flags) ->
@@ -175,10 +174,10 @@ let find_ids_to_revert sigma hyps id :identifier list=
      else new_flags
    in
    let c = get_type (List.find (get_id %> Id.equal id) hyps) in
-   let (hyp_ids:identifier list) = List.map get_id hyps in
+   let (hyp_ids:Id.t list) = List.map get_id hyps in
    let ids = id::(List.fold_left (fun a n -> if (occurs_in n c) then n::a else a) [] hyp_ids) in
    let (flags:bool list) = mark_till_no_change ids hyps (false_list (List.length hyps)) in
-   List.fold_left (fun a (flag,n) -> if flag then n::a else a) [] ((List.combine flags hyp_ids):(bool*identifier) list)
+   List.fold_left (fun a (flag,n) -> if flag then n::a else a) [] ((List.combine flags hyp_ids):(bool*Id.t) list)
 
 let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_apply itfs tac_opt gl =
   if current_dep = to_depth then
@@ -193,11 +192,11 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
         List.map
           (fun (f, fl) ->
              if f then
-               let avoid_ids_ref = ref [] in
+               let avoid_ids_ref = ref Id.Set.empty in
                let fresh = List.map
                             (fun f ->
-                              let new_id = fresh_id (!avoid_ids_ref) (id_of_string "x") gl in
-                              avoid_ids_ref := new_id::(!avoid_ids_ref);
+                              let new_id = fresh_id (!avoid_ids_ref) (Id.of_string "x") gl in
+                              avoid_ids_ref := Id.Set.add new_id !avoid_ids_ref;
                               (f, new_id))
                             fl in
                let subterms = List.rev (List.fold_left (fun a (f, id) -> if f then (id::a) else a) [] fresh) in
@@ -214,14 +213,14 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                                             (Idmap.find x replacement_map)
                                         with _ -> x) ids_to_apply in
                let rep_arr = Array.of_list replaced in
-               let hypids_ref = ref [] in
+               let hypids_ref = ref Id.Set.empty in
                let forward_tacs =
                  List.map
                    (fun st ->
                       let ids_to_app = Array.map (fun x -> mkVar x) (Array.append rep_arr [|st|]) in
                       let term = mkApp ((mkVar fixid), ids_to_app) in
-                      let hyp_id = fresh_id (!hypids_ref) (id_of_string "IH") gl in
-                      hypids_ref := hyp_id::(!hypids_ref);
+                      let hyp_id = fresh_id (!hypids_ref) (Id.of_string "IH") gl in
+                      hypids_ref := Id.Set.add hyp_id !hypids_ref;
                       let tac = Tactics.pose_proof (Name hyp_id) term in
                       tac
                    )
@@ -230,14 +229,14 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                let for_tac = tclTHENLIST (List.map Proofview.V82.of_tactic forward_tacs) in
                let tac = destruct_to_depth (List.hd subterms) rec_flags fixid to_depth (current_dep+1)
                          de_ids ids_to_apply itfs (Some for_tac) in
-               let pl = List.map (fun id -> (None, IntroNaming (IntroIdentifier id))) fresh_ids in
+               let pl = List.map (fun id -> (CAst.make (IntroNaming (IntroIdentifier id)))) fresh_ids in
                (pl, tac)
              else ([], Proofview.V82.of_tactic (clear [fixid]))
           )
           rec_intro_flags
         )
     in
-    let pat = (None, IntroOrPattern pl) in
+    let pat = CAst.make (IntroOrPattern pl) in
     tclTHENS
       (Proofview.V82.of_tactic (destruct false None (mkVar id) (Some pat) None))
       tacs gl
@@ -274,7 +273,7 @@ let di_tac3 id k gl =
   let hyps = pf_hyps gl in
   let ids_to_rev = find_ids_to_revert evmap hyps id in
   let index = (find_index id ids_to_rev 0)+1 in
-  let fixid = fresh_id [] (id_of_string "circ") gl in
+  let fixid = fresh_id Id.Set.empty (Id.of_string "circ") gl in
   let dec_arg_type = pf_unsafe_type_of gl (mkVar id) in
   let io = get_inductive evmap dec_arg_type in
   match io with
@@ -295,22 +294,22 @@ let di_tac3 id k gl =
      gl
 
 
-let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_ids ids_to_rev gl =
+let rec destruct_on_pattern2 id ids_to_avoid ({CAst.loc=loc;CAst.v=pat},{CAst.loc=loc2;CAst.v=pat2}) fixid des_ids ids_to_rev gl =
   let idref = ref None in
   let rec iter_and_branch pl patbuf tacbuf replace_ids =
     match pl with
     | [] -> (List.rev patbuf, List.rev tacbuf)
-    | ((loc,p),(loc2,p2))::rest ->
+    | ({CAst.loc=loc;CAst.v=p},{CAst.loc=loc2;CAst.v=p2})::rest ->
            (
            match (p, p2) with
            | (IntroAction (IntroOrAndPattern ioap), _) -> (* if it's another pattern at one level below, we need to find a name for it one level above *)
                let new_id = fresh_id !ids_to_avoid id gl in
-                 ids_to_avoid := new_id::!ids_to_avoid;
-                 idref := Some (new_id, (loc,p), (loc2,p2));
-                 iter_and_branch rest ((loc, IntroNaming (IntroIdentifier new_id))::patbuf) tacbuf replace_ids
+                 ids_to_avoid := Id.Set.add new_id !ids_to_avoid;
+                 idref := Some (new_id, (CAst.make ?loc p), (CAst.make ?loc:loc2 p2));
+                 iter_and_branch rest (CAst.make ?loc (IntroNaming (IntroIdentifier new_id))::patbuf) tacbuf replace_ids
 
            | (IntroNaming (IntroIdentifier id1), IntroNaming IntroAnonymous) ->
-               iter_and_branch rest ((loc,p)::patbuf) tacbuf (id1::replace_ids)
+               iter_and_branch rest ((CAst.make ?loc p)::patbuf) tacbuf (id1::replace_ids)
 
            | (IntroNaming (IntroIdentifier id1), IntroNaming (IntroIdentifier id2)) ->
                let rep_ids = List.rev (id1::replace_ids) in
@@ -328,7 +327,7 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
                let app_arg = List.map (fun x -> mkVar x) (cut_list_at id1 replaced) in
                let term = mkApp ((mkVar fixid), (Array.of_list app_arg)) in
                let tac = Tactics.pose_proof (Name id2) term in
-                 iter_and_branch rest ((loc,p)::patbuf) (tac::tacbuf) replace_ids
+                 iter_and_branch rest ((CAst.make ?loc p)::patbuf) (tac::tacbuf) replace_ids
 
            | _ -> raise (DIPatError "unexpected pattern")
            )
@@ -358,7 +357,7 @@ let rec destruct_on_pattern2 id ids_to_avoid ((loc,pat),(loc2,pat2)) fixid des_i
       let com_list = try List.combine ipll ipll2
                      with e -> print_string "list combine error at destruct_on_pattern2 3\n"; raise e in
       let (taclist, pl) = iter_or_branch com_list in
-      let dp = (loc, IntroOrPattern pl) in
+      let dp = CAst.make ?loc (IntroOrPattern pl) in
       tclTHENS (Proofview.V82.of_tactic (destruct false None (mkVar id) (Some dp) None)) taclist gl
 
   | _ -> print_string "wrong pattern"; tclIDTAC gl
@@ -369,8 +368,8 @@ let di_tac4 id ip ip2 gl =
   let hyps = pf_hyps gl in
   let ids_to_rev = find_ids_to_revert evmap hyps id in
   let index = (find_index id ids_to_rev 0)+1 in
-  let ids_to_avoid = ref (List.append (ids_of_pattern ip) (ids_of_pattern ip2)) in
-  let fixid = fresh_id [] (id_of_string "circ") gl in
+  let ids_to_avoid = ref (Id.Set.of_list (List.append (ids_of_pattern ip) (ids_of_pattern ip2))) in
+  let fixid = fresh_id Id.Set.empty (Id.of_string "circ") gl in
   let dec_arg_type = pf_unsafe_type_of gl (mkVar id) in
   let io = get_inductive evmap dec_arg_type in
   match io with
