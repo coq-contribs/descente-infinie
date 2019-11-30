@@ -3,14 +3,15 @@
 
 open Refiner
 open Tactics
-open Term
+open Constr
 open EConstr
 open Names
 open Tacmach
 open Declarations
 open Stdarg
 open Extraargs
-open Misctypes
+open Tactypes
+open Namegen
 open Context.Named.Declaration
 open Util
 
@@ -205,12 +206,12 @@ let rec destruct_to_depth id rec_flags fixid to_depth current_dep de_ids ids_to_
                                    with e -> print_string "list combine error at destruct_to_depth 1\n";
                                              raise e in
                let replacement_map = List.fold_left
-                                          (fun m (old_id,new_id) -> Idmap.add old_id new_id m)
-                                          (Idmap.empty) com_list in
+                                          (fun m (old_id,new_id) -> Id.Map.add old_id new_id m)
+                                          (Id.Map.empty) com_list in
                let replaced = List.map
                                    (fun x ->
                                         try
-                                            (Idmap.find x replacement_map)
+                                            (Id.Map.find x replacement_map)
                                         with _ -> x) ids_to_apply in
                let rep_arr = Array.of_list replaced in
                let hypids_ref = ref Id.Set.empty in
@@ -289,7 +290,7 @@ let di_tac3 id k gl =
     let temp_ids = cut_list_at id ids_to_rev in
     let ids_to_apply = sublist temp_ids 0 ((List.length temp_ids) - 1) in
     let itfs = List.map (fun ct -> get_introtypeflags evmap ind is_dep ct num_params) constypes in
-    Proofview.V82.of_tactic (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix (Some fixid) index; intros;
+    Proofview.V82.of_tactic (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix fixid index; intros;
      (Proofview.V82.tactic (destruct_to_depth id rec_flags fixid k 0 de_ids ids_to_apply itfs None))])
      gl
 
@@ -317,12 +318,12 @@ let rec destruct_on_pattern2 id ids_to_avoid ({CAst.loc=loc;CAst.v=pat},{CAst.lo
                                    with e -> print_string "list combine error at destruct_on_pattern2 1\n";
                                              raise e in
                let replacement_map = List.fold_left
-                                          (fun m (old_id,new_id) -> Idmap.add old_id new_id m)
-                                          (Idmap.empty) com_list in
+                                          (fun m (old_id,new_id) -> Id.Map.add old_id new_id m)
+                                          (Id.Map.empty) com_list in
                let replaced = List.map
                                    (fun x ->
                                         try
-                                            (Idmap.find x replacement_map)
+                                            (Id.Map.find x replacement_map)
                                         with _ -> x) ids_to_rev in
                let app_arg = List.map (fun x -> mkVar x) (cut_list_at id1 replaced) in
                let term = mkApp ((mkVar fixid), (Array.of_list app_arg)) in
@@ -379,7 +380,7 @@ let di_tac4 id ip ip2 gl =
     let tmp = get_des_ids evmap dec_arg_type id num_params in
     let des_ids = List.append tmp [id] in
     Proofview.V82.of_tactic
-     (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix (Some fixid) index; intros_using ids_to_rev;
+     (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix fixid index; intros_using ids_to_rev;
        (Proofview.V82.tactic (destruct_on_pattern2 id ids_to_avoid (ip,ip2) fixid des_ids ids_to_rev))])
     gl
 
@@ -392,6 +393,8 @@ let di_tac6 ce k gl =
   match kind (project gl) ce with
   | Var id -> di_tac3 id k gl
   | _ -> tclIDTAC gl
+
+open Tacarg
 
 (* grammar declarations which hook the tactic to the proof engine *)
 TACTIC EXTEND di
