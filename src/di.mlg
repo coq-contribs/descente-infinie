@@ -1,12 +1,10 @@
-(*i camlp4deps: "parsing/grammar.cma" i*)
-(*i camlp4use: "pa_extend.cmo" i*)
+{
 
 open Refiner
 open Tactics
 open Constr
 open EConstr
 open Names
-open Tacmach
 open Declarations
 open Stdarg
 open Extraargs
@@ -15,7 +13,11 @@ open Namegen
 open Context.Named.Declaration
 open Util
 
+}
+
 DECLARE PLUGIN "di"
+
+{
 
 exception DIPatError of string
 
@@ -42,7 +44,7 @@ let get_des_ids sigma (hyp_type:constr) (id:Id.t) (num_params:int) =
       (
       match kind sigma c with
       | (Rel _ | Sort _ | Const _ | Construct _ | Ind _ | Prod _ | LetIn _ | Lambda _
-         | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _ | Proj _) -> None
+         | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _ | Proj _ | Int _) -> None
       | Var id -> Some id
       | App (_,al) ->
                       (Array.fold_left
@@ -59,11 +61,6 @@ let get_des_ids sigma (hyp_type:constr) (id:Id.t) (num_params:int) =
     il
   | _ -> assert false
 
-let get_current_context () =
-    try Pfedit.get_current_goal_context ()
-    with e when Logic.catchable_exception e ->
-      (Evd.empty, Global.env())
-
 let get_constructors (i:inductive) n =
   let rec iter buf k =
     if k = 0 then buf
@@ -76,7 +73,7 @@ let is_recursive sigma (ind:inductive) (c:constr) =
     (
     match kind sigma c with
     | (Rel _ | Var _   | Sort _ | Const _ | Construct _
-       | Cast _ | Evar _ | Meta _ | LetIn _ | Case _ | Fix _ | CoFix _ | Proj _) -> 0
+       | Cast _ | Evar _ | Meta _ | LetIn _ | Case _ | Fix _ | CoFix _ | Proj _ | Int _) -> 0
 
     | Ind (i, _) -> if eq_ind i ind then 1 else 0
 
@@ -135,7 +132,7 @@ let find_ids_to_revert sigma hyps id :Id.t list=
     (
     match kind sigma c with
     | (Rel _ | Sort _ | Const _ | Construct _ | Ind _
-       | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _ | Proj _) -> false
+       | Cast _ | Evar _ | Meta _ | Case _ | Fix _ | CoFix _ | Proj _ | Int _) -> false
     | LetIn (_,_,_,c) -> occurs_in id c
     | Var v -> v = id
     | Prod (_,_,c) -> occurs_in id c
@@ -269,16 +266,18 @@ let rec cut_list_at x l =
         if id = x then [id] else id::(cut_list_at x rest)
 
 
-let di_tac3 id k gl =
-  let (evmap, env) = get_current_context () in
-  let hyps = pf_hyps gl in
+let di_tac3 id k =
+  Proofview.Goal.enter (fun gl ->
+  let env = Proofview.Goal.env gl in
+  let evmap = Proofview.Goal.sigma gl in
+  let hyps = EConstr.named_context env in
   let ids_to_rev = find_ids_to_revert evmap hyps id in
   let index = (find_index id ids_to_rev 0)+1 in
-  let fixid = fresh_id Id.Set.empty (Id.of_string "circ") gl in
-  let dec_arg_type = pf_unsafe_type_of gl (mkVar id) in
+  let fixid = fresh_id_in_env Id.Set.empty (Id.of_string "circ") env in
+  let dec_arg_type = Typing.unsafe_type_of env evmap (mkVar id) in
   let io = get_inductive evmap dec_arg_type in
   match io with
-  | None -> print_string "not an inductive product\n"; tclIDTAC gl
+  | None -> print_string "not an inductive product\n"; Tacticals.New.tclIDTAC
   | Some (ind, ctx) ->
     let numcons = Array.length (snd (Global.lookup_inductive ind)).mind_consnames in
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
@@ -290,9 +289,8 @@ let di_tac3 id k gl =
     let temp_ids = cut_list_at id ids_to_rev in
     let ids_to_apply = sublist temp_ids 0 ((List.length temp_ids) - 1) in
     let itfs = List.map (fun ct -> get_introtypeflags evmap ind is_dep ct num_params) constypes in
-    Proofview.V82.of_tactic (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix fixid index; intros;
+    Tacticals.New.tclTHENLIST [revert ids_to_rev; fix fixid index; intros;
      (Proofview.V82.tactic (destruct_to_depth id rec_flags fixid k 0 de_ids ids_to_apply itfs None))])
-     gl
 
 
 let rec destruct_on_pattern2 id ids_to_avoid ({CAst.loc=loc;CAst.v=pat},{CAst.loc=loc2;CAst.v=pat2}) fixid des_ids ids_to_rev gl =
@@ -364,40 +362,46 @@ let rec destruct_on_pattern2 id ids_to_avoid ({CAst.loc=loc;CAst.v=pat},{CAst.lo
   | _ -> print_string "wrong pattern"; tclIDTAC gl
 
 
-let di_tac4 id ip ip2 gl =
-  let (evmap, env) = get_current_context () in
-  let hyps = pf_hyps gl in
+let di_tac4 id ip ip2 =
+  Proofview.Goal.enter (fun gl ->
+  let env = Proofview.Goal.env gl in
+  let evmap = Proofview.Goal.sigma gl in
+  let hyps = EConstr.named_context env in
   let ids_to_rev = find_ids_to_revert evmap hyps id in
   let index = (find_index id ids_to_rev 0)+1 in
   let ids_to_avoid = ref (Id.Set.of_list (List.append (ids_of_pattern ip) (ids_of_pattern ip2))) in
-  let fixid = fresh_id Id.Set.empty (Id.of_string "circ") gl in
-  let dec_arg_type = pf_unsafe_type_of gl (mkVar id) in
+  let fixid = fresh_id_in_env Id.Set.empty (Id.of_string "circ") env in
+  let dec_arg_type = Typing.unsafe_type_of env evmap (mkVar id) in
   let io = get_inductive evmap dec_arg_type in
   match io with
-  | None -> print_string "not an inductive product\n"; tclIDTAC gl
+  | None -> print_string "not an inductive product\n"; Tacticals.New.tclIDTAC
   | Some (ind, ctx) ->
     let num_params = (fst (Global.lookup_inductive ind)).mind_nparams in
     let tmp = get_des_ids evmap dec_arg_type id num_params in
     let des_ids = List.append tmp [id] in
-    Proofview.V82.of_tactic
-     (Tacticals.New.tclTHENLIST [revert ids_to_rev; fix fixid index; intros_using ids_to_rev;
+    Tacticals.New.tclTHENLIST [revert ids_to_rev; fix fixid index; intros_using ids_to_rev;
        (Proofview.V82.tactic (destruct_on_pattern2 id ids_to_avoid (ip,ip2) fixid des_ids ids_to_rev))])
-    gl
 
-let di_tac5 ce ip ip2 gl =
-  match kind (project gl) ce with
-  | Var id -> di_tac4 id ip ip2 gl
-  | _ -> tclIDTAC gl
+let di_tac5 ce ip ip2 =
+  Proofview.Goal.enter (fun gl ->
+  let evmap = Proofview.Goal.sigma gl in
+  match kind evmap ce with
+  | Var id -> di_tac4 id ip ip2
+  | _ -> Tacticals.New.tclIDTAC)
 
-let di_tac6 ce k gl =
-  match kind (project gl) ce with
-  | Var id -> di_tac3 id k gl
-  | _ -> tclIDTAC gl
+let di_tac6 ce k =
+  Proofview.Goal.enter (fun gl ->
+  let evmap = Proofview.Goal.sigma gl in
+  match kind evmap ce with
+  | Var id -> di_tac3 id k
+  | _ -> Tacticals.New.tclIDTAC)
 
 open Tacarg
 
+}
+
 (* grammar declarations which hook the tactic to the proof engine *)
 TACTIC EXTEND di
-| ["di" constr(ce) natural(k)] -> [Proofview.V82.tactic (di_tac6 ce k)]
-| ["di" constr(ce) "as" intropattern(ip) "hyps" intropattern(ip2)] -> [Proofview.V82.tactic (di_tac5 ce ip ip2)]
+| ["di" constr(ce) natural(k)] -> { di_tac6 ce k }
+| ["di" constr(ce) "as" intro_pattern(ip) "hyps" intro_pattern(ip2)] -> { di_tac5 ce ip ip2 }
 END

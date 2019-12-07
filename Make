@@ -8,5 +8,5 @@
 COQDOC = "$(COQBIN)coqdoc -interpolate -utf8"
 CAMLP4OPTIONS = "-loc loc"
 
-src/di.ml4
+src/di.mlg
 src/di_plugin.mllib
